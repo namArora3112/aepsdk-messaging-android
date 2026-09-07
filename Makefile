@@ -56,6 +56,7 @@ assemble-phone-release:
 	(./code/gradlew -p code/$(EXTENSION-LIBRARY-FOLDER-NAME) assemblePhoneRelease)
 
 assemble-app:
+	@bash ./scripts/ensure-testapp-android-platform.sh
 	(./code/gradlew -p code/$(TEST-APP-FOLDER-NAME) assemble)
 
 ci-publish-maven-local-jitpack: assemble-phone-release

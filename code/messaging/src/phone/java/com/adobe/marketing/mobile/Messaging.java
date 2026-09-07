@@ -512,6 +512,17 @@ public final class Messaging {
      *     propositions
      */
     public static void updatePropositionsForSurfaces(@NonNull final List<Surface> surfaces) {
+        // ⚠️ REPRODUCTION TEST for GitHub issue #589
+        // This simulates a slow network call (3-5 seconds in production, 30 here for testing)
+        // to prove that getPropositionsForSurfaces() gets queued behind this synchronous call
+        try {
+            android.util.Log.d("Messaging", "[REPRO-NATIVE-SDK] updatePropositionsForSurfaces (fire-and-forget): Starting 30-second wait to simulate slow network...");
+            Thread.sleep(30000); // 30 seconds
+            android.util.Log.d("Messaging", "[REPRO-NATIVE-SDK] updatePropositionsForSurfaces: 30-second wait complete!");
+        } catch (InterruptedException e) {
+            android.util.Log.e("Messaging", "[REPRO-NATIVE-SDK] Sleep interrupted", e);
+        }
+
         updatePropositionsForSurfaces(surfaces, null);
     }
 
