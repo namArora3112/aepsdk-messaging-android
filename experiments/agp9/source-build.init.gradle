@@ -1,0 +1,35 @@
+gradle.settingsEvaluated { settings ->
+    println("AGP9_SOURCE_EXPERIMENT Gradle=${gradle.gradleVersion}, root=${settings.rootDir}")
+}
+
+gradle.beforeProject { project ->
+    project.buildscript.configurations.configureEach { configuration ->
+        configuration.resolutionStrategy.force("com.android.tools.build:gradle:9.0.1")
+    }
+    if (project == project.rootProject) {
+        project.buildscript.dependencies.add(
+            "classpath", "com.android.tools.build:gradle:9.0.1")
+        project.buildscript.configurations.named("classpath") {
+            incoming.afterResolve {
+                resolvedConfiguration.resolvedArtifacts.findAll {
+                    it.moduleVersion.id.name == "aepsdk-commons"
+                }.each {
+                    println("AGP9_SOURCE_EXPERIMENT Commons=${it.moduleVersion.id}")
+                }
+            }
+        }
+    }
+
+    ["com.android.application", "com.android.library"].each { pluginId ->
+        project.pluginManager.withPlugin(pluginId) {
+            def plugin = project.plugins.findPlugin(pluginId)
+            def versionClass = plugin.class.classLoader.loadClass("com.android.Version")
+            def version = versionClass.getField("ANDROID_GRADLE_PLUGIN_VERSION").get(null)
+            println("AGP9_SOURCE_EXPERIMENT ${project.path}: AGP=${version}, plugin=${pluginId}")
+            println("AGP9_SOURCE_EXPERIMENT ${project.path}: kotlinExtension=${project.extensions.findByName('kotlin') != null}, externalKotlinPlugin=${project.plugins.hasPlugin('org.jetbrains.kotlin.android')}")
+            ["android.builtInKotlin", "android.newDsl"].each { name ->
+                println("AGP9_SOURCE_EXPERIMENT ${project.path}: ${name}=${project.providers.gradleProperty(name).orNull ?: '<unset>'}")
+            }
+        }
+    }
+}
