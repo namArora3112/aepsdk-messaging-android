@@ -14,9 +14,13 @@ import com.adobe.marketing.mobile.gradle.BuildConstants
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services")
+    id("com.google.gms.google-services") apply false
 }
 
+val telemetryValidation = providers.gradleProperty("telemetryValidation").orNull == "true"
+if (!telemetryValidation) {
+    apply(plugin = "com.google.gms.google-services")
+}
 val mavenCoreVersion: String by project
 val mavenLifecycleVersion: String by project
 val mavenAssuranceVersion: String by project
@@ -29,12 +33,17 @@ android {
       namespace = "com.adobe.marketing.mobile.messagingsample"
 
     defaultConfig {
-        applicationId = "com.adobe.marketing.mobile.messagingsample"
+        applicationId = if (telemetryValidation) {
+            "com.adobe.marketing.mobile.messagingsample.telemetry.connected"
+        } else {
+            "com.adobe.marketing.mobile.messagingsample"
+        }
         compileSdk = BuildConstants.Versions.COMPILE_SDK_VERSION
         minSdk = BuildConstants.Versions.MIN_SDK_VERSION
         targetSdk = BuildConstants.Versions.TARGET_SDK_VERSION
         versionCode = BuildConstants.Versions.VERSION_CODE
-        versionName = BuildConstants.Versions.VERSION_NAME
+        versionName = providers.gradleProperty("telemetryAppVersion").orNull ?: BuildConstants.Versions.VERSION_NAME
+        buildConfigField("boolean", "TELEMETRY_VALIDATION", telemetryValidation.toString())
     }
 
     kotlinOptions {
@@ -49,8 +58,15 @@ android {
         }
     }
     buildFeatures {
+        buildConfig = true
         viewBinding = true
         compose=true
+    }
+    sourceSets.getByName("main").java.srcDir(
+        if (telemetryValidation) "src/telemetryValidation/java" else "src/standard/java"
+    )
+    if (telemetryValidation) {
+        sourceSets.getByName("debug").manifest.srcFile("src/telemetryValidation/AndroidManifest.xml")
     }
     composeOptions {
         kotlinCompilerExtensionVersion="1.4.6"
@@ -60,6 +76,9 @@ android {
 dependencies {
     implementation(project(":messaging"))
     implementation("com.adobe.marketing.mobile:core:$mavenCoreVersion")
+    if (telemetryValidation) {
+        implementation("com.adobe.marketing.mobile:sdktelemetry:$mavenCoreVersion")
+    }
     implementation("com.adobe.marketing.mobile:lifecycle:$mavenLifecycleVersion")
     implementation("com.adobe.marketing.mobile:assurance:$mavenAssuranceVersion")
     implementation("com.adobe.marketing.mobile:edge:$mavenEdgeVersion")

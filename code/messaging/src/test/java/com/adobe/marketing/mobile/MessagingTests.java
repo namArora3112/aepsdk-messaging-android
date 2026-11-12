@@ -520,13 +520,16 @@ public class MessagingTests {
                         messagingMockedStatic
                                 .when(
                                         () ->
-                                                Messaging.updatePropositionsForSurfaces(
-                                                        anyList(), any(AdobeCallback.class)))
+                                                Messaging.updatePropositionsForSurfacesInternal(
+                                                        anyList(),
+                                                        ArgumentMatchers.isNull(),
+                                                        ArgumentMatchers.isNull(),
+                                                        any(AdobeCallback.class)))
                                 .thenAnswer(
                                         (Answer<Void>)
                                                 invocation -> {
                                                     AdobeCallback<Boolean> booleanAdobeCallback =
-                                                            invocation.getArgument(1);
+                                                            invocation.getArgument(3);
                                                     booleanAdobeCallback.call(true);
                                                     return null;
                                                 });
@@ -582,13 +585,16 @@ public class MessagingTests {
                         messagingMockedStatic
                                 .when(
                                         () ->
-                                                Messaging.updatePropositionsForSurfaces(
-                                                        anyList(), any(AdobeCallback.class)))
+                                                Messaging.updatePropositionsForSurfacesInternal(
+                                                        anyList(),
+                                                        ArgumentMatchers.isNull(),
+                                                        ArgumentMatchers.isNull(),
+                                                        any(AdobeCallback.class)))
                                 .thenAnswer(
                                         (Answer<Void>)
                                                 invocation -> {
                                                     AdobeCallback<Boolean> booleanAdobeCallback =
-                                                            invocation.getArgument(1);
+                                                            invocation.getArgument(3);
                                                     booleanAdobeCallback.call(false);
                                                     return null;
                                                 });

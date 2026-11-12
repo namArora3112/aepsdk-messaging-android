@@ -79,3 +79,4 @@ code/messaging/jacoco.exec
 
 .vscode/
 code/messaging/cache/
+.scout/

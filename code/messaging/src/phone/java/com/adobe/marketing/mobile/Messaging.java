@@ -14,6 +14,7 @@ package com.adobe.marketing.mobile;
 import android.content.Intent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.adobe.marketing.mobile.internal.telemetry.SdkTelemetry;
 import com.adobe.marketing.mobile.messaging.CompletionHandler;
 import com.adobe.marketing.mobile.messaging.IamRefreshHandler;
 import com.adobe.marketing.mobile.messaging.MessagingExtension;
@@ -111,6 +112,8 @@ public final class Messaging {
             @NonNull final Intent intent,
             @NonNull final String messageId,
             final @NonNull Map<String, String> data) {
+        SdkTelemetry.recordApiCall(
+                "com.adobe.messaging", EXTENSION_VERSION, "addPushTrackingDetails");
         if (intent == null) {
             Log.warning(
                     LOG_TAG, CLASS_NAME, "Failed to add push tracking details as intent is null.");
@@ -169,6 +172,7 @@ public final class Messaging {
      *     FirebaseMessagingService#onMessageReceived}
      */
     public static void trackPushReceived(@NonNull final RemoteMessage remoteMessage) {
+        SdkTelemetry.recordApiCall("com.adobe.messaging", EXTENSION_VERSION, "trackPushReceived");
         final String messageId = remoteMessage.getMessageId();
         PushCallbackHandler.notifyReceived(new MessagingPushPayload(remoteMessage));
         if (StringUtils.isNullOrEmpty(messageId)) {
@@ -244,6 +248,8 @@ public final class Messaging {
             final boolean applicationOpened,
             @Nullable final String customActionId,
             @Nullable final AdobeCallback<PushTrackingStatus> callback) {
+        SdkTelemetry.recordApiCall(
+                "com.adobe.messaging", EXTENSION_VERSION, "handleNotificationResponse");
         if (intent == null) {
             Log.warning(
                     LOG_TAG,
@@ -302,8 +308,10 @@ public final class Messaging {
                                                     + " message.");
                                     final List<Surface> surfacesList = new ArrayList<>();
                                     surfacesList.add(new Surface());
-                                    Messaging.updatePropositionsForSurfaces(
+                                    updatePropositionsForSurfacesInternal(
                                             surfacesList,
+                                            null,
+                                            null,
                                             success -> {
                                                 if (!success) {
                                                     Log.debug(
@@ -394,6 +402,8 @@ public final class Messaging {
      * Optimizer.
      */
     public static void refreshInAppMessages() {
+        SdkTelemetry.recordApiCall(
+                "com.adobe.messaging", EXTENSION_VERSION, "Messaging.refreshInAppMessages");
         IamRefreshHandler.INSTANCE.refreshInAppMessages(null);
     }
 
@@ -411,6 +421,8 @@ public final class Messaging {
     public static void getPropositionsForSurfaces(
             @NonNull final List<Surface> surfaces,
             @NonNull final AdobeCallback<Map<Surface, List<Proposition>>> callback) {
+        SdkTelemetry.recordApiCall(
+                "com.adobe.messaging", EXTENSION_VERSION, "getPropositionsForSurfaces");
         if (callback == null) {
             Log.warning(
                     LOG_TAG,
@@ -517,6 +529,8 @@ public final class Messaging {
      * <p>Use this method to clear stale offline content cards, for example after a user logs out.
      */
     public static void clearCachedPropositions() {
+        SdkTelemetry.recordApiCall(
+                "com.adobe.messaging", EXTENSION_VERSION, "clearCachedPropositions");
         final Map<String, Object> eventData = new HashMap<>();
         eventData.put(CLEAR_PERSISTED_PROPOSITIONS, true);
 
@@ -603,6 +617,16 @@ public final class Messaging {
      *     processed by the Messaging extension
      */
     public static void updatePropositionsForSurfaces(
+            @NonNull final List<Surface> surfaces,
+            @Nullable final Map<String, Object> xdm,
+            @Nullable final Map<String, Object> data,
+            @Nullable final AdobeCallback<Boolean> callback) {
+        SdkTelemetry.recordApiCall(
+                "com.adobe.messaging", EXTENSION_VERSION, "updatePropositionsForSurfaces");
+        updatePropositionsForSurfacesInternal(surfaces, xdm, data, callback);
+    }
+
+    static void updatePropositionsForSurfacesInternal(
             @NonNull final List<Surface> surfaces,
             @Nullable final Map<String, Object> xdm,
             @Nullable final Map<String, Object> data,
@@ -737,6 +761,8 @@ public final class Messaging {
      */
     public static void setPushNotificationListener(
             @Nullable final PushNotificationListener listener) {
+        SdkTelemetry.recordApiCall(
+                "com.adobe.messaging", EXTENSION_VERSION, "setPushNotificationListener");
         PushCallbackHandler.setListener(listener);
     }
 }

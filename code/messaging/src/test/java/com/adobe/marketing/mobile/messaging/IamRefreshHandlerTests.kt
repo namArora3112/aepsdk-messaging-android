@@ -15,7 +15,12 @@ import com.adobe.marketing.mobile.AdobeCallback
 import com.adobe.marketing.mobile.Event
 import com.adobe.marketing.mobile.EventSource
 import com.adobe.marketing.mobile.EventType
+import com.adobe.marketing.mobile.Messaging
 import com.adobe.marketing.mobile.MobileCore
+import com.adobe.marketing.mobile.internal.PluginRegistry
+import com.adobe.marketing.mobile.internal.telemetry.ApiCall
+import com.adobe.marketing.mobile.internal.telemetry.ApiCallRecorder
+import com.adobe.marketing.mobile.internal.telemetry.InMemoryTelemetryPlugin
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -29,6 +34,7 @@ import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnitRunner
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 @RunWith(MockitoJUnitRunner.Silent::class)
 class IamRefreshHandlerTests {
@@ -44,6 +50,7 @@ class IamRefreshHandlerTests {
 
     @Before
     fun setup() {
+        PluginRegistry.clear()
         IamRefreshHandler.reset()
         mobileCoreMockedStatic = mockStatic(MobileCore::class.java)
         messagingExtensionMockedStatic = mockStatic(MessagingExtension::class.java)
@@ -51,6 +58,8 @@ class IamRefreshHandlerTests {
 
     @After
     fun tearDown() {
+        PluginRegistry.clear()
+        IamRefreshHandler.reset()
         mobileCoreMockedStatic.close()
         messagingExtensionMockedStatic.close()
     }
@@ -148,6 +157,55 @@ class IamRefreshHandlerTests {
         val handlerCaptor = ArgumentCaptor.forClass(CompletionHandler::class.java)
         messagingExtensionMockedStatic.verify { MessagingExtension.addCompletionHandler(handlerCaptor.capture()) }
         handlerCaptor.value.handle.call(true) // Should not crash
+    }
+
+    @Test
+    fun publicRefreshRecordsEachInvocationBeforeCoalescing() {
+        val plugin = InMemoryTelemetryPlugin()
+        plugin.updateCollectionPolicy(enabled = true, consentGranted = true)
+        PluginRegistry.addPlugin(plugin)
+
+        Messaging.refreshInAppMessages()
+        Messaging.refreshInAppMessages()
+
+        val calls = plugin.snapshot()
+        assertEquals(2, calls.size)
+        calls.forEach {
+            assertEquals("com.adobe.messaging", it.extensionName)
+            assertEquals(Messaging.extensionVersion(), it.extensionVersion)
+            assertEquals("Messaging.refreshInAppMessages", it.apiName)
+        }
+        mobileCoreMockedStatic.verify({ MobileCore.dispatchEvent(any(Event::class.java)) }, times(1))
+    }
+
+    @Test
+    fun internalRefreshDoesNotRecordAPublicApiCall() {
+        val plugin = InMemoryTelemetryPlugin()
+        plugin.updateCollectionPolicy(enabled = true, consentGranted = true)
+        PluginRegistry.addPlugin(plugin)
+
+        IamRefreshHandler.refreshInAppMessages()
+
+        assertTrue(plugin.snapshot().isEmpty())
+        mobileCoreMockedStatic.verify({ MobileCore.dispatchEvent(any(Event::class.java)) }, times(1))
+    }
+
+    @Test
+    fun publicRefreshStillDispatchesWhenTelemetryFails() {
+        var attempted = false
+        PluginRegistry.addPlugin(
+            object : ApiCallRecorder {
+                override fun recordApiCall(call: ApiCall) {
+                    attempted = true
+                    throw IllegalStateException("Recorder unavailable")
+                }
+            }
+        )
+
+        Messaging.refreshInAppMessages()
+
+        assertTrue(attempted)
+        mobileCoreMockedStatic.verify({ MobileCore.dispatchEvent(any(Event::class.java)) }, times(1))
     }
 
     private fun <T> any(type: Class<T>): T = org.mockito.ArgumentMatchers.any(type)

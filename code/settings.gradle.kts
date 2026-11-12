@@ -34,3 +34,23 @@ include(
     ":messaging",
     ":messagingtestutils",
 )
+
+providers.gradleProperty("localCorePath").orNull?.let { corePath ->
+    includeBuild(corePath) {
+        name = "telemetry-core"
+        dependencySubstitution {
+            substitute(module("com.adobe.marketing.mobile:core")).using(project(":core"))
+            substitute(module("com.adobe.marketing.mobile:testutils")).using(project(":testutils"))
+            substitute(module("com.adobe.marketing.mobile:sdktelemetry")).using(project(":telemetry"))
+        }
+    }
+}
+
+providers.gradleProperty("localEdgePath").orNull?.let { edgePath ->
+    includeBuild(edgePath) {
+        name = "telemetry-edge"
+        dependencySubstitution {
+            substitute(module("com.adobe.marketing.mobile:edge")).using(project(":edge"))
+        }
+    }
+}

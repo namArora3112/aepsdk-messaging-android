@@ -28,7 +28,11 @@ import com.adobe.marketing.mobile.notificationbuilder.NotificationBuilderPlugin
 class MessagingApplication : Application() {
     private val ENVIRONMENT_FILE_ID = "3149c49c3910/4f6b2fbf2986/launch-7d78a5fd1de3-development"
     private val ASSURANCE_SESSION_ID = ""
-    private val STAGING_APP_ID = "staging/1b50a869c4a2/bcd1a623883f/launch-e44d085fc760-development"
+    private val STAGING_APP_ID = if (BuildConfig.TELEMETRY_VALIDATION) {
+        "staging/1b50a869c4a2/bfcaae461edd/launch-e9937845c996"
+    } else {
+        "staging/1b50a869c4a2/bcd1a623883f/launch-e44d085fc760-development"
+    }
     private val STAGING = true
 
     override fun onCreate() {
@@ -36,6 +40,9 @@ class MessagingApplication : Application() {
 
         MobileCore.setApplication(this)
         MobileCore.setLogLevel(LoggingMode.VERBOSE)
+        if (BuildConfig.DEBUG && BuildConfig.TELEMETRY_VALIDATION) {
+            TelemetryValidation.start(this)
+        }
 
         // Render AJO push templates with the aepsdk-ui-android NotificationBuilder plugin.
         // Register plugins before registering extensions.
@@ -74,6 +81,9 @@ class MessagingApplication : Application() {
                 )
             } else {
                 MobileCore.configureWithAppID(ENVIRONMENT_FILE_ID)
+            }
+            if (BuildConfig.DEBUG && BuildConfig.TELEMETRY_VALIDATION) {
+                TelemetryValidation.configure()
             }
             MobileCore.lifecycleStart(null)
 
