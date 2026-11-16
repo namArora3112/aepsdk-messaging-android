@@ -394,7 +394,9 @@ public final class Messaging {
      * Optimizer.
      */
     public static void refreshInAppMessages() {
+        final String telemetryOp = com.adobe.marketing.mobile.telemetrybridge.TelemetryBridge.operationStarted("com.adobe.messaging", "sdk.messaging.refresh");
         IamRefreshHandler.INSTANCE.refreshInAppMessages(null);
+        com.adobe.marketing.mobile.telemetrybridge.TelemetryBridge.operationCompleted(telemetryOp, "com.adobe.messaging", "sdk.messaging.refresh", "invoked", "refresh handed to IAM refresh handler");
     }
 
     /**
