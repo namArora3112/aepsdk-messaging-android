@@ -557,7 +557,24 @@ public class RefreshEventCorrelationPocTests {
 
     private void saveTrace(String scenario, int publicApiCalls) throws Exception {
         JSONArray trace = new JSONArray();
+        HubSignatureProjectionPoc projection = new HubSignatureProjectionPoc();
+        int linkedEvents = 0;
+        int linkedErrors = 0;
         for (Event event : events) {
+            Map<String, Object> data = event.getEventData();
+            Object xdm = data == null ? null : data.get("xdm");
+            Object xdmType = xdm instanceof Map ? ((Map<?, ?>) xdm).get("eventType") : null;
+            projection.observe(
+                    event.getType(),
+                    event.getSource(),
+                    data != null && Boolean.TRUE.equals(data.get("refreshmessages")),
+                    xdmType instanceof String ? (String) xdmType : null);
+            if (resolveRoot(event) != null) {
+                linkedEvents++;
+                if (is(event, EventType.EDGE, EventSource.ERROR_RESPONSE_CONTENT)) {
+                    linkedErrors++;
+                }
+            }
             JSONObject row =
                     new JSONObject()
                             .put("id", event.getUniqueIdentifier())
@@ -574,11 +591,31 @@ public class RefreshEventCorrelationPocTests {
                                             : new JSONObject(event.getEventData()));
             trace.put(row);
         }
+        assertEquals(1, projection.count("messaging.refresh.request"));
+        assertEquals(1, projection.count("edge.propositionFetch.request"));
+        if ("http-400-with-completion".equals(scenario)) {
+            assertTrue(projection.count("edge.error.observed") >= 1);
+            assertTrue(linkedErrors >= 1);
+            assertTrue(projection.count("messaging.finalize.observed") >= 1);
+        }
+        if ("callback-timeout-response-still-held".equals(scenario)) {
+            assertEquals(0, projection.count("messaging.finalize.observed"));
+            assertEquals(0, projection.count("edge.error.observed"));
+        }
+        if ("code-based-notification-missing-request-link".equals(scenario)) {
+            assertEquals(1, projection.count("messaging.notification.observed"));
+        }
         JSONObject result =
                 new JSONObject()
                         .put("scenario", scenario)
                         .put("publicRefreshApiCalls", publicApiCalls)
                         .put("localCompletion", nullable(localCompletion.get()))
+                        .put("idFreeProjection", new JSONObject(projection.snapshot()))
+                        .put(
+                                "idAwareCorrelation",
+                                new JSONObject()
+                                        .put("linkedEvents", linkedEvents)
+                                        .put("linkedErrorEvents", linkedErrors))
                         .put("syntheticOnly", true)
                         .put(
                                 "synchronization",
