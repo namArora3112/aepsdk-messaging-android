@@ -91,6 +91,7 @@ dependencies {
     androidTestImplementation("com.adobe.marketing.mobile:edge:$mavenEdgeVersion")
     androidTestImplementation("com.adobe.marketing.mobile:edgeidentity:$mavenEdgeIdentityVersion")
     androidTestImplementation(project(":messagingtestutils"))
+    androidTestImplementation("com.adobe.marketing.mobile:telemetry:1.0.0-hybrid-poc")
     // specify byte buddy version to fix compatibility issue with jdk 21
     testImplementation ("org.mockito:mockito-inline:5.2.0"){
         exclude(group = "net.bytebuddy", module = "byte-buddy")

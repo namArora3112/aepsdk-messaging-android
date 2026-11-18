@@ -394,9 +394,8 @@ public final class Messaging {
      * Optimizer.
      */
     public static void refreshInAppMessages() {
-        final String telemetryOp = com.adobe.marketing.mobile.telemetrybridge.TelemetryBridge.operationStarted("com.adobe.messaging", "sdk.messaging.refresh");
+        MessagingTelemetry.started(MessagingTelemetry.REFRESH);
         IamRefreshHandler.INSTANCE.refreshInAppMessages(null);
-        com.adobe.marketing.mobile.telemetrybridge.TelemetryBridge.operationCompleted(telemetryOp, "com.adobe.messaging", "sdk.messaging.refresh", "invoked", "refresh handed to IAM refresh handler");
     }
 
     /**
@@ -413,7 +412,27 @@ public final class Messaging {
     public static void getPropositionsForSurfaces(
             @NonNull final List<Surface> surfaces,
             @NonNull final AdobeCallback<Map<Surface, List<Proposition>>> callback) {
+        final String telemetryId = MessagingTelemetry.started(MessagingTelemetry.GET);
+        final AdobeCallbackWithError<Map<Surface, List<Proposition>>> observedCallback =
+                new AdobeCallbackWithError<Map<Surface, List<Proposition>>>() {
+                    @Override
+                    public void call(final Map<Surface, List<Proposition>> result) {
+                        MessagingTelemetry.completed(
+                                telemetryId, MessagingTelemetry.GET, "success");
+                        callback.call(result);
+                    }
+
+                    @Override
+                    public void fail(final AdobeError error) {
+                        MessagingTelemetry.completed(
+                                telemetryId,
+                                MessagingTelemetry.GET,
+                                error == AdobeError.CALLBACK_TIMEOUT ? "timed_out" : "failure");
+                        failWithError(callback, error);
+                    }
+                };
         if (callback == null) {
+            MessagingTelemetry.completed(telemetryId, MessagingTelemetry.GET, "rejected");
             Log.warning(
                     LOG_TAG,
                     CLASS_NAME,
@@ -422,6 +441,7 @@ public final class Messaging {
         }
 
         if (surfaces == null || surfaces.isEmpty()) {
+            MessagingTelemetry.completed(telemetryId, MessagingTelemetry.GET, "rejected");
             Log.warning(
                     LOG_TAG,
                     CLASS_NAME,
@@ -437,6 +457,7 @@ public final class Messaging {
         }
 
         if (validSurfacesFlattened.isEmpty()) {
+            MessagingTelemetry.completed(telemetryId, MessagingTelemetry.GET, "rejected");
             Log.warning(
                     LOG_TAG,
                     CLASS_NAME,
@@ -460,7 +481,7 @@ public final class Messaging {
                 new AdobeCallbackWithError<Event>() {
                     @Override
                     public void fail(final AdobeError adobeError) {
-                        failWithError(callback, adobeError);
+                        observedCallback.fail(adobeError);
                     }
 
                     @Override
@@ -468,13 +489,13 @@ public final class Messaging {
                         try {
                             final Map<String, Object> eventData = event.getEventData();
                             if (MapUtils.isNullOrEmpty(eventData)) {
-                                failWithError(callback, AdobeError.UNEXPECTED_ERROR);
+                                observedCallback.fail(AdobeError.UNEXPECTED_ERROR);
                                 return;
                             }
 
                             if (eventData.containsKey(RESPONSE_ERROR)) {
                                 final int errorCode = DataReader.getInt(eventData, RESPONSE_ERROR);
-                                failWithError(callback, convertToAdobeError(errorCode));
+                                observedCallback.fail(convertToAdobeError(errorCode));
                                 return;
                             }
 
@@ -487,7 +508,7 @@ public final class Messaging {
                                             PROPOSITIONS,
                                             Collections.emptyList());
                             if (retrievedPropositions == null || retrievedPropositions.isEmpty()) {
-                                failWithError(callback, AdobeError.UNEXPECTED_ERROR);
+                                observedCallback.fail(AdobeError.UNEXPECTED_ERROR);
                                 return;
                             }
 
@@ -503,9 +524,9 @@ public final class Messaging {
                                 }
                             }
 
-                            callback.call(requestedPropositionsMap);
+                            observedCallback.call(requestedPropositionsMap);
                         } catch (final DataReaderException ignored) {
-                            failWithError(callback, AdobeError.UNEXPECTED_ERROR);
+                            observedCallback.fail(AdobeError.UNEXPECTED_ERROR);
                         }
                     }
                 });
