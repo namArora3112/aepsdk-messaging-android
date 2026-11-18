@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:label="Telemetry Catalog POC" android:allowBackup="false"
+        tools:replace="android:label,android:allowBackup">
+        <activity android:name=".MainActivity" android:enabled="false" />
+        <activity android:name=".TelemetryCatalogActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <provider android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider" tools:node="remove" />
+        <service android:name=".NotificationService" tools:node="remove" />
+        <service android:name="com.adobe.marketing.mobile.messaging.MessagingService" tools:node="remove" />
+    </application>
+</manifest>

@@ -24,6 +24,10 @@ val mavenEdgeVersion: String by project
 val mavenEdgeIdentityVersion: String by project
 val mavenEdgeConsentVersion: String by project
 val mavenNotificationBuilderVersion: String by project
+val telemetryCatalogPoc = providers.gradleProperty("telemetryCatalogPoc").orNull == "true"
+val telemetryPocEndpoint = providers.gradleProperty("telemetryPocEndpoint").orNull ?: ""
+val telemetryPocOrg = providers.gradleProperty("telemetryPocOrg").orNull ?: ""
+fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
       namespace = "com.adobe.marketing.mobile.messagingsample"
@@ -35,6 +39,10 @@ android {
         targetSdk = BuildConstants.Versions.TARGET_SDK_VERSION
         versionCode = BuildConstants.Versions.VERSION_CODE
         versionName = BuildConstants.Versions.VERSION_NAME
+        manifestPlaceholders["sampleApplication"] = "com.adobe.marketing.mobile.messagingsample.MessagingApplication"
+        if (telemetryCatalogPoc) {
+            testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
     }
 
     kotlinOptions {
@@ -44,6 +52,14 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            if (telemetryCatalogPoc) {
+                applicationIdSuffix = ".telemetry.catalog"
+                manifestPlaceholders["sampleApplication"] = "com.adobe.marketing.mobile.messagingsample.TelemetryCatalogApplication"
+                buildConfigField("String", "TELEMETRY_POC_ENDPOINT", quoted(telemetryPocEndpoint))
+                buildConfigField("String", "TELEMETRY_POC_ORG", quoted(telemetryPocOrg))
+            }
+        }
         getByName(BuildConstants.BuildTypes.RELEASE)  {
             isMinifyEnabled = false
         }
@@ -51,10 +67,22 @@ android {
     buildFeatures {
         viewBinding = true
         compose=true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion="1.4.6"
     }
+    if (telemetryCatalogPoc) {
+        sourceSets.getByName("debug") {
+            java.srcDir("src/telemetryCatalog/java")
+            manifest.srcFile("src/telemetryCatalog/AndroidManifest.xml")
+        }
+        sourceSets.getByName("androidTest").java.srcDir("src/telemetryCatalogAndroidTest/java")
+    }
+}
+
+if (telemetryCatalogPoc) {
+    tasks.matching { it.name == "processDebugGoogleServices" }.configureEach { enabled = false }
 }
 
 dependencies {
@@ -66,6 +94,11 @@ dependencies {
     implementation("com.adobe.marketing.mobile:edgeidentity:$mavenEdgeIdentityVersion")
     implementation("com.adobe.marketing.mobile:edgeconsent:$mavenEdgeConsentVersion")
     implementation("com.adobe.marketing.mobile:notificationbuilder:$mavenNotificationBuilderVersion")
+    if (telemetryCatalogPoc) {
+        debugImplementation("com.adobe.marketing.mobile:telemetry:1.0.0-catalog-poc")
+        androidTestImplementation("androidx.test.ext:junit:1.2.1")
+        androidTestImplementation("androidx.test:runner:1.6.2")
+    }
 
     implementation("com.google.firebase:firebase-messaging:23.4.1")
     implementation("androidx.appcompat:appcompat:1.6.1")
