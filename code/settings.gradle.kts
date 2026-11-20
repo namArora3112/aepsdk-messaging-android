@@ -20,7 +20,12 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        mavenLocal()
+        if (providers.gradleProperty("telemetryCatalogPoc").orNull == "true") {
+            mavenLocal()
+            maven { url = uri(settingsDir.resolve(".telemetry-poc/maven")) }
+        } else {
+            mavenLocal()
+        }
         google()
         mavenCentral()
         maven { url = uri("https://central.sonatype.com/repository/maven-snapshots/") }

@@ -13,6 +13,7 @@
 -->
 <resources>
     <string name="app_name">Messaging Sample App</string>
+    <string name="telemetry_events">Telemetry events</string>
     <string name="action_settings">Settings</string>
     <string name="title_activity_message_feed">Message Feed Activity</string>
     <string name="title_activity_single_feed">Single Feed Activity</string>

@@ -292,6 +292,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setupButtonClickListeners() {
+        if (BuildConfig.TELEMETRY_CATALOG_POC) {
+            binding.btnTelemetryEvents.visibility = android.view.View.VISIBLE
+            binding.btnTelemetryEvents.setOnClickListener {
+                startActivity(Intent().setClassName(this, "com.adobe.marketing.mobile.messagingsample.TelemetryCatalogActivity"))
+            }
+        }
         binding.btnGetLocalNotification.setOnClickListener {
             scheduleNotification(getNotification("Click on the notification for tracking"), 1000)
         }

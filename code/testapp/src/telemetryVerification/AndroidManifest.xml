@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:label="Telemetry Catalog POC" android:allowBackup="false"
+        tools:replace="android:label,android:allowBackup">
+        <meta-data android:name="com.adobe.marketing.mobile.telemetry.AUTO_START"
+            android:value="${telemetryAutoStart}" />
+        <meta-data android:name="com.adobe.marketing.mobile.telemetry.UPLOADS_ENABLED"
+            android:value="${telemetryUploadsEnabled}" />
+        <provider android:name=".TelemetryPhase2NetworkProvider"
+            android:authorities="${applicationId}.phase2-network"
+            android:exported="false" android:initOrder="1000"
+            android:enabled="${telemetryPhase2Enabled}" />
+        <provider android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup" tools:node="merge">
+            <meta-data android:name="com.adobe.marketing.mobile.telemetry.TelemetryStartupInitializer"
+                android:value="androidx.startup" tools:node="merge" />
+        </provider>
+        <activity android:name=".TelemetryAutoInitCrashActivity" android:exported="true"
+            android:enabled="${telemetryVerificationEnabled}" />
+        <service android:name=".TelemetryAutoInitProbeService" android:exported="false"
+            android:process=":telemetryProbe" android:enabled="${telemetryVerificationEnabled}" />
+        <activity android:name=".MainActivity" android:enabled="false" />
+        <activity android:name=".TelemetryCatalogActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <provider android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider" tools:node="remove" />
+        <service android:name=".NotificationService" tools:node="remove" />
+        <service android:name="com.adobe.marketing.mobile.messaging.MessagingService" tools:node="remove" />
+    </application>
+</manifest>

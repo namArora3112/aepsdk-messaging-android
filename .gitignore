@@ -53,6 +53,7 @@ captures/
 .idea/
 
 code/.gradle/
+code/.telemetry-poc/
 code/messaging/build/
 code/local.properties
 

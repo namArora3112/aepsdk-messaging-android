@@ -27,6 +27,13 @@
         android:text="Messaging Sample App" />
 
     <Button
+        android:id="@+id/btnTelemetryEvents"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/telemetry_events"
+        android:visibility="gone" />
+
+    <Button
         android:id="@+id/btnGetLocalNotification"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

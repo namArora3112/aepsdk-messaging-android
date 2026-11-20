@@ -24,3 +24,12 @@ buildscript {
         classpath("io.github.takahirom.roborazzi:roborazzi-gradle-plugin:1.31.0")
     }
 }
+
+if (providers.gradleProperty("telemetryCatalogPoc").orNull == "true") {
+    val coreCoordinate = "com.adobe.marketing.mobile:core:${providers.gradleProperty("mavenCoreVersion").get()}"
+    subprojects {
+        configurations.configureEach {
+            resolutionStrategy.force(coreCoordinate)
+        }
+    }
+}

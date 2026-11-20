@@ -25,6 +25,15 @@ val mavenEdgeIdentityVersion: String by project
 val mavenEdgeConsentVersion: String by project
 val mavenNotificationBuilderVersion: String by project
 val telemetryCatalogPoc = providers.gradleProperty("telemetryCatalogPoc").orNull == "true"
+val telemetryDatabaseControlsVerification =
+    providers.gradleProperty("telemetryDatabaseControlsVerification").orNull == "true"
+val telemetryPhase2Verification =
+    providers.gradleProperty("telemetryPhase2Verification").orNull == "true"
+val telemetryAutoInitVerification =
+    providers.gradleProperty("telemetryAutoInitVerification").orNull == "true" || telemetryPhase2Verification
+val telemetryIsolatedVerification = telemetryAutoInitVerification || telemetryDatabaseControlsVerification
+val telemetryManifest = if (telemetryIsolatedVerification)
+    "src/telemetryVerification/AndroidManifest.xml" else "src/telemetryCatalog/AndroidManifest.xml"
 val telemetryPocEndpoint = providers.gradleProperty("telemetryPocEndpoint").orNull ?: ""
 val telemetryPocOrg = providers.gradleProperty("telemetryPocOrg").orNull ?: ""
 fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -38,8 +47,19 @@ android {
         minSdk = BuildConstants.Versions.MIN_SDK_VERSION
         targetSdk = BuildConstants.Versions.TARGET_SDK_VERSION
         versionCode = BuildConstants.Versions.VERSION_CODE
+        if (telemetryAutoInitVerification) {
+            providers.gradleProperty("telemetryAutoInitVersionCode").orNull?.let {
+                versionCode = it.toInt()
+            }
+        }
         versionName = BuildConstants.Versions.VERSION_NAME
+        buildConfigField("boolean", "TELEMETRY_CATALOG_POC", telemetryCatalogPoc.toString())
         manifestPlaceholders["sampleApplication"] = "com.adobe.marketing.mobile.messagingsample.MessagingApplication"
+        manifestPlaceholders["telemetryAutoStart"] =
+            providers.gradleProperty("telemetryAutoStart").orNull ?: "true"
+        manifestPlaceholders["telemetryVerificationEnabled"] = telemetryAutoInitVerification.toString()
+        manifestPlaceholders["telemetryPhase2Enabled"] = telemetryPhase2Verification.toString()
+        manifestPlaceholders["telemetryUploadsEnabled"] = telemetryAutoInitVerification.toString()
         if (telemetryCatalogPoc) {
             testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
@@ -54,10 +74,17 @@ android {
     buildTypes {
         getByName("debug") {
             if (telemetryCatalogPoc) {
-                applicationIdSuffix = ".telemetry.catalog"
+                if (telemetryDatabaseControlsVerification) applicationIdSuffix = ".telemetry.databasecontrols"
+                if (telemetryAutoInitVerification) applicationIdSuffix = ".telemetry.autoinit"
+                if (telemetryPhase2Verification) applicationIdSuffix = ".telemetry.phase2"
                 manifestPlaceholders["sampleApplication"] = "com.adobe.marketing.mobile.messagingsample.TelemetryCatalogApplication"
                 buildConfigField("String", "TELEMETRY_POC_ENDPOINT", quoted(telemetryPocEndpoint))
                 buildConfigField("String", "TELEMETRY_POC_ORG", quoted(telemetryPocOrg))
+                buildConfigField("boolean", "TELEMETRY_AUTO_INIT_VERIFICATION", telemetryAutoInitVerification.toString())
+                buildConfigField("boolean", "TELEMETRY_PHASE2_VERIFICATION", telemetryPhase2Verification.toString())
+                buildConfigField("boolean", "TELEMETRY_ISOLATED_VERIFICATION", telemetryIsolatedVerification.toString())
+                buildConfigField("boolean", "TELEMETRY_AUTO_INIT_FALLBACK",
+                    (providers.gradleProperty("telemetryAutoInitFallback").orNull == "true").toString())
             }
         }
         getByName(BuildConstants.BuildTypes.RELEASE)  {
@@ -75,13 +102,23 @@ android {
     if (telemetryCatalogPoc) {
         sourceSets.getByName("debug") {
             java.srcDir("src/telemetryCatalog/java")
-            manifest.srcFile("src/telemetryCatalog/AndroidManifest.xml")
+            manifest.srcFile(telemetryManifest)
+            if (telemetryAutoInitVerification &&
+                providers.gradleProperty("telemetryInitializerNode").orNull == "remove") {
+                val prepareManifest = tasks.register<Copy>("prepareTelemetryVerificationManifest") {
+                    from(telemetryManifest)
+                    into(layout.buildDirectory.dir("generated/telemetryVerification"))
+                    filter { line -> line.replace("tools:node=\"merge\" />", "tools:node=\"remove\" />") }
+                }
+                manifest.srcFile(layout.buildDirectory.file("generated/telemetryVerification/AndroidManifest.xml"))
+                tasks.matching { it.name == "preDebugBuild" }.configureEach { dependsOn(prepareManifest) }
+            }
         }
         sourceSets.getByName("androidTest").java.srcDir("src/telemetryCatalogAndroidTest/java")
     }
 }
 
-if (telemetryCatalogPoc) {
+if (telemetryCatalogPoc && telemetryIsolatedVerification) {
     tasks.matching { it.name == "processDebugGoogleServices" }.configureEach { enabled = false }
 }
 

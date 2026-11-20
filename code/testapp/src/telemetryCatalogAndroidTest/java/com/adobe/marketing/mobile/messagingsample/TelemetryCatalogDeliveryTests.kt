@@ -9,9 +9,14 @@
  */
 package com.adobe.marketing.mobile.messagingsample
 
+import android.content.Intent
+import android.widget.Button
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.adobe.marketing.mobile.MobileCore
+import com.adobe.marketing.mobile.Event
+import com.adobe.marketing.mobile.EventType
+import com.adobe.marketing.mobile.EventSource
 import com.adobe.marketing.mobile.services.HttpConnecting
 import com.adobe.marketing.mobile.services.NetworkCallback
 import com.adobe.marketing.mobile.services.NetworkRequest
@@ -22,6 +27,7 @@ import com.adobe.marketing.mobile.telemetry.TelemetryConfig
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
+import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,10 +58,12 @@ class TelemetryCatalogDeliveryTests {
                 original.connectAsync(request, callback)
             }
         }
+        Telemetry.setUploadsEnabled(true)
     }
 
     @After fun cleanup() {
         Telemetry.applyConfig(policy(enabled = false))
+        Telemetry.setUploadsEnabled(false)
         callbacks.toList().forEach { runCatching { it.call(response()) } }
         ServiceProvider.getInstance().networkService = original
     }
@@ -71,6 +79,13 @@ class TelemetryCatalogDeliveryTests {
         await { Telemetry.pendingRecords().any { it.eventName == "trackAction.requestObserved" } }
     }
 
+    private fun recordMappedCall() {
+        val event = Event.Builder("Get propositions", EventType.MESSAGING, EventSource.REQUEST_CONTENT)
+            .setEventData(mapOf("privateMarker" to "MUST_NOT_EXPORT")).build()
+        MobileCore.dispatchEvent(event)
+        await { Telemetry.pendingRecords().any { it.hubEvent?.eventId == event.uniqueIdentifier } }
+    }
+
     private fun response(body: String = "{}") = object : HttpConnecting {
         override fun getResponseCode() = 200
         override fun getResponseMessage() = "OK"
@@ -82,6 +97,96 @@ class TelemetryCatalogDeliveryTests {
 
     private fun type(payload: JSONObject) = payload.getJSONArray("events").getJSONObject(0).getJSONObject("xdm").getString("eventType")
     private fun tenant(payload: JSONObject) = payload.getJSONArray("events").getJSONObject(0).getJSONObject("xdm").getJSONObject("_cjmstage")
+
+    @Test fun pausedUploadsRetainExistingAndNewRecordsUntilEnabled() {
+        Telemetry.setUploadsEnabled(false)
+        Telemetry.applyConfig(policy().copy(eventNameMapperEnabled = true))
+        recordMappedCall()
+        val firstIds = Telemetry.pendingRecords().map { it.recordId }.toSet()
+        repeat(3) { Telemetry.flush() }
+        assertTrue("Paused flush must not start a network request", calls.isEmpty())
+        recordMappedCall()
+        await { Telemetry.pendingCount() > firstIds.size }
+        assertTrue(Telemetry.pendingRecords().map { it.recordId }.containsAll(firstIds))
+        val allIds = Telemetry.pendingRecords().map { it.recordId }.toSet()
+        Telemetry.setUploadsEnabled(true)
+        assertEquals(1, calls.size)
+        assertEquals(allIds, Telemetry.pendingRecords().map { it.recordId }.toSet())
+        callbacks.removeAt(0).call(response())
+        while (callbacks.isNotEmpty()) callbacks.removeAt(0).call(response())
+        assertEquals(0, Telemetry.pendingCount())
+    }
+
+    @Test fun pauseFencesLateAcknowledgementWithoutPurgingCapturedRecords() {
+        Telemetry.applyConfig(policy().copy(eventNameMapperEnabled = true))
+        recordMappedCall()
+        Telemetry.flush()
+        val ids = Telemetry.pendingRecords().map { it.recordId }.toSet()
+        Telemetry.setUploadsEnabled(false)
+        callbacks.removeAt(0).call(response())
+        assertEquals(1, calls.size)
+        assertEquals(ids, Telemetry.pendingRecords().map { it.recordId }.toSet())
+        Telemetry.flush()
+        assertEquals(1, calls.size)
+    }
+
+    @Test fun databaseViewerShowsMappedApisAndAutoEventsWithoutDeletingOrExposingPayloads() {
+        Telemetry.setUploadsEnabled(false)
+        Telemetry.applyConfig(policy().copy(eventNameMapperEnabled = true))
+        recordMappedCall()
+        val before = Telemetry.pendingRecords().map { it.recordId }.toSet()
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val snapshot = TelemetryDatabaseSnapshot.read(app)
+        assertTrue(snapshot.contains("adobe.telemetry.autoqueue / events"))
+        assertTrue(snapshot.contains("adobe.telemetry.outbox / records"))
+        assertTrue(snapshot.contains("\"apiName\""))
+        assertTrue(snapshot.contains(Telemetry.pendingRecords().first { it.hubEvent?.name == "Get propositions" }.eventName))
+        assertFalse(snapshot.contains("MUST_NOT_EXPORT"))
+        assertFalse(snapshot.contains("optimizedContext"))
+        assertFalse(snapshot.contains("sessionId"))
+        assertEquals(before, Telemetry.pendingRecords().map { it.recordId }.toSet())
+        assertTrue(calls.isEmpty())
+    }
+
+    @Test fun mainSampleOpensTelemetryAndCapturesItsOwnApiCalls() {
+        assumeFalse(BuildConfig.TELEMETRY_ISOLATED_VERIFICATION)
+        Telemetry.setUploadsEnabled(false)
+        Telemetry.applyConfig(policy().copy(eventNameMapperEnabled = true))
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
+        assertEquals(MainActivity::class.java.name, launchIntent.component!!.className)
+        val main = instrumentation.startActivitySync(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val monitor = instrumentation.addMonitor(TelemetryCatalogActivity::class.java.name, null, false)
+        var telemetryActivity: android.app.Activity? = null
+        try {
+            instrumentation.runOnMainSync {
+                main.findViewById<Button>(R.id.btnRefreshInAppMessages).performClick()
+            }
+            await { Telemetry.pendingRecords().any { it.eventName == "refreshInAppMessages" } }
+            instrumentation.runOnMainSync {
+                val button = main.findViewById<Button>(R.id.btnTelemetryEvents)
+                assertEquals(android.view.View.VISIBLE, button.visibility)
+                button.performClick()
+            }
+            telemetryActivity = instrumentation.waitForMonitorWithTimeout(monitor, 5000)
+            assertNotNull("Main sample must open the embedded telemetry activity", telemetryActivity)
+            await {
+                val automatic = TelemetryDatabaseSnapshot.read(context, automatic = true)
+                automatic.contains(MainActivity::class.java.name) &&
+                    automatic.contains(TelemetryCatalogActivity::class.java.name)
+            }
+            assertTrue(TelemetryDatabaseSnapshot.read(context, automatic = false).contains("refreshInAppMessages"))
+            assertEquals(false, Telemetry.stats()["uploadsEnabled"])
+            assertTrue(calls.isEmpty())
+        } finally {
+            instrumentation.removeMonitor(monitor)
+            instrumentation.runOnMainSync {
+                telemetryActivity?.finish()
+                main.finish()
+            }
+        }
+    }
 
     @Test fun oneInFlightRequestAndOptOutFencePreventFollowOnDelivery() {
         Telemetry.applyConfig(policy())
@@ -146,5 +251,53 @@ class TelemetryCatalogDeliveryTests {
         Telemetry.flush()
         assertEquals("OTHER@AdobeOrg", tenant(calls.single()).getString("orgId"))
         assertFalse(calls.single().toString().contains("TEST@AdobeOrg"))
+    }
+
+    @Test fun nameMapperExportsCallResponseAndWildWithOriginalLinksAndNoPayload() {
+        Telemetry.applyConfig(policy().copy(eventNameMapperEnabled = true, captureDirectHooks = true))
+        Telemetry.event("com.adobe.messaging", "direct.hooks.must.not.mix.with.mapper")
+        val request = Event.Builder("Get propositions", EventType.MESSAGING, EventSource.REQUEST_CONTENT)
+            .setEventData(mapOf("privateMarker" to "MUST_NOT_EXPORT")).build()
+        val reply = Event.Builder("Message propositions response", EventType.MESSAGING, EventSource.RESPONSE_CONTENT)
+            .inResponseToEvent(request).build()
+        val wild = Event.Builder("Catalog unmapped example", EventType.MESSAGING, EventSource.REQUEST_CONTENT)
+            .chainToParentEvent(request).build()
+        val expected = listOf(request, reply, wild).associateBy { it.uniqueIdentifier }
+        expected.values.forEach(MobileCore::dispatchEvent)
+        await { Telemetry.pendingRecords().mapNotNull { it.hubEvent?.eventId }.containsAll(expected.keys) }
+        assertTrue(Telemetry.pendingRecords().all { it.recordKind == "catalog_mapped_event" })
+        Telemetry.flush()
+        while (callbacks.isNotEmpty()) callbacks.removeAt(0).call(response())
+        val entries = calls.filter { type(it) == "sdk.usage" }
+            .map { tenant(it).getJSONObject("telemetry").getJSONArray("events").getJSONObject(0) }
+            .filter { it.optString("eventId") in expected }
+            .associateBy { it.getString("eventId") }
+        assertEquals(expected.keys, entries.keys)
+        assertEquals("API_CALL", entries.getValue(request.uniqueIdentifier).getString("apiEventType"))
+        assertEquals("API_RESPONSE", entries.getValue(reply.uniqueIdentifier).getString("apiEventType"))
+        assertEquals("WILD_EVENT", entries.getValue(wild.uniqueIdentifier).getString("apiEventType"))
+        assertEquals(request.uniqueIdentifier, entries.getValue(reply.uniqueIdentifier).getString("responseId"))
+        assertEquals(request.uniqueIdentifier, entries.getValue(wild.uniqueIdentifier).getString("parentId"))
+        assertFalse(entries.getValue(wild.uniqueIdentifier).has("apiName"))
+        entries.forEach { (id, entry) -> assertEquals(expected.getValue(id).timestamp, entry.getLong("timestamp")) }
+        calls.filter { type(it) == "sdk.usage" }.forEach {
+            assertTrue(tenant(it).has("sdkVersions"))
+            assertEquals("android", tenant(it).getJSONObject("metadata").getString("platform"))
+            assertFalse(it.toString().contains("MUST_NOT_EXPORT"))
+            assertFalse(it.toString().contains("eventData"))
+        }
+    }
+
+    @Test fun switchingBackToLegacyPurgesMapperRecordsAndFencesAnOutstandingRequest() {
+        Telemetry.applyConfig(policy().copy(eventNameMapperEnabled = true))
+        val event = Event.Builder("Get propositions", EventType.MESSAGING, EventSource.REQUEST_CONTENT).build()
+        MobileCore.dispatchEvent(event)
+        await { Telemetry.pendingRecords().any { it.hubEvent?.eventId == event.uniqueIdentifier } }
+        Telemetry.flush()
+        assertEquals(1, calls.size)
+        Telemetry.applyConfig(policy())
+        assertEquals(0, Telemetry.pendingCount())
+        callbacks.removeAt(0).call(response())
+        assertEquals(1, calls.size)
     }
 }
